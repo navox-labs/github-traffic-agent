@@ -26,3 +26,4 @@ jobs:
         with:
           token: ${{ secrets.TRAFFIC_TOKEN }}
           mode: ${{ github.event.schedule == '0 4 1,15 * *' && 'report' || github.event.inputs.mode || 'collect' }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
