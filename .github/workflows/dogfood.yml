@@ -1,0 +1,28 @@
+name: Dogfood - Traffic Collection
+
+on:
+  schedule:
+    - cron: '0 3 * * *'       # Daily collection at 3 AM UTC
+    - cron: '0 4 1,15 * *'    # Bi-weekly report on 1st and 15th
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Run mode'
+        default: 'collect'
+        type: choice
+        options:
+          - collect
+          - report
+
+jobs:
+  traffic:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./
+        with:
+          token: ${{ secrets.TRAFFIC_TOKEN }}
+          mode: ${{ github.event.schedule == '0 4 1,15 * *' && 'report' || github.event.inputs.mode || 'collect' }}
