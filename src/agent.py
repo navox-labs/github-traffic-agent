@@ -8,7 +8,7 @@ import sys
 
 from src.models.config import AgentConfig
 from src.skills.collect import collect
-from src.skills.notify import NotificationMessage, notify
+from src.skills.notify import BriefNotification, NotificationMessage, notify
 from src.skills.store import store_and_commit
 from src.skills.validate import validate, write_audit_entry
 from src.utils.logger import setup_logging
@@ -104,11 +104,13 @@ async def run_collect(config: AgentConfig) -> None:
 
 
 async def run_report(config: AgentConfig) -> None:
-    """Bi-weekly pipeline: Analyze -> Predict -> Propose -> Report -> Notify."""
+    """Bi-weekly pipeline: Analyze -> Predict -> Propose -> Intelligence -> Notify."""
     from src.skills.analyze import analyze
+    from src.skills.intelligence import generate_brief, load_prior_actions, save_actions
     from src.skills.predict import predict
     from src.skills.propose import propose
     from src.skills.report import generate_report
+    from src.skills.validate import _get_health_status
 
     for repo in config.repos:
         logger.info("=== Generating report for %s ===", repo)
@@ -116,23 +118,55 @@ async def run_report(config: AgentConfig) -> None:
             analysis = analyze(repo, config.data_dir)
             predictions = predict(repo, config.data_dir)
             proposals = propose(analysis, predictions)
+
+            # Generate long report as committed artifact
             report_path = generate_report(repo, config.data_dir, analysis, predictions, proposals)
 
-            # Commit report
+            # Intelligence layer: LLM brief (or fallback)
+            prior_actions = load_prior_actions(config.data_dir)
+            health_status = _get_health_status(config.data_dir)
+            product_context = config.product_context or {"repo": repo}
+            if "repo" not in product_context:
+                product_context["repo"] = repo
+
+            brief = generate_brief(
+                analysis=analysis,
+                predictions=predictions,
+                proposals=proposals,
+                product_context=product_context,
+                prior_actions=prior_actions,
+                health_status=health_status,
+                data_dir=config.data_dir,
+                model=config.model,
+            )
+
+            # Persist actions for next run's feedback loop
+            if brief.actions:
+                save_actions(brief, config.data_dir)
+
+            # Commit report + actions file (actions must persist across runs)
+            from pathlib import Path
+
             from src.utils.git import commit_and_push
 
+            commit_files = [report_path]
+            actions_file = str(
+                Path(config.data_dir) / "memory" / "brief-actions.json"
+            )
+            if Path(actions_file).exists():
+                commit_files.append(actions_file)
             commit_and_push(
-                [report_path],
+                commit_files,
                 f"traffic: bi-weekly report for {repo}",
                 config.branch,
             )
 
-            msg = NotificationMessage(
-                subject=f"Traffic Report: {repo}",
-                body=f"Bi-weekly traffic report generated for {repo}.\nSee {report_path}",
-                level="success",
+            # Notify with the Brief — each channel renders natively
+            level = "warning" if brief.alert else "success"
+            await notify(
+                config.notify,
+                BriefNotification(brief=brief, repo=repo, level=level),
             )
-            await notify(config.notify, msg)
 
         except Exception as exc:
             logger.exception("Failed to generate report for %s: %s", repo, exc)

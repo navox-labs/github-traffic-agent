@@ -145,3 +145,66 @@ class Proposal(BaseModel):
     description: str
     confidence: float = Field(ge=0.0, le=1.0)
     trigger: str
+
+
+BRIEF_MAX_HEADLINE_WORDS = 15
+BRIEF_MAX_ACTION_WORDS = 12
+BRIEF_MAX_ACTIONS = 2
+
+
+class Brief(BaseModel):
+    """The phone-notification-sized intelligence output."""
+
+    headline: str = ""
+    actions: list[str] = Field(default_factory=list)
+    alert: bool = False
+    verdict: str = Field(default="flat", description="growing | flat | declining")
+    loop_comment: str = ""
+    health_token: str = ""
+
+    @classmethod
+    def from_rules(cls, proposals: list[Proposal], trends: list[TrendData] | None = None) -> Brief:
+        """Deterministic fallback: build a Brief from rule-based proposals."""
+        if trends:
+            vg = trends[0].views_growth_pct
+            cg = trends[0].clones_growth_pct
+            if vg > 5 or cg > 5:
+                verdict = "growing"
+            elif vg < -5 or cg < -5:
+                verdict = "declining"
+            else:
+                verdict = "flat"
+            headline = f"Views {vg:+.0f}%, clones {cg:+.0f}% over {trends[0].period}"
+        else:
+            verdict = "flat"
+            headline = "Insufficient data for trend analysis"
+
+        actions = [p.title for p in proposals[:2]]
+        alert = any(p.confidence >= 0.8 for p in proposals[:2])
+
+        brief = cls(headline=headline, actions=actions, alert=alert, verdict=verdict)
+        brief.enforce_caps()
+        return brief
+
+    def enforce_caps(self) -> None:
+        """Truncate fields that exceed word/count limits."""
+        words = self.headline.split()
+        if len(words) > BRIEF_MAX_HEADLINE_WORDS:
+            self.headline = " ".join(words[:BRIEF_MAX_HEADLINE_WORDS])
+
+        self.actions = self.actions[:BRIEF_MAX_ACTIONS]
+        for i, action in enumerate(self.actions):
+            words = action.split()
+            if len(words) > BRIEF_MAX_ACTION_WORDS:
+                self.actions[i] = " ".join(words[:BRIEF_MAX_ACTION_WORDS])
+
+    def total_words(self) -> int:
+        """Total word count for the digest."""
+        count = len(self.headline.split())
+        for a in self.actions:
+            count += len(a.split())
+        if self.loop_comment:
+            count += len(self.loop_comment.split())
+        if self.health_token:
+            count += len(self.health_token.split())
+        return count

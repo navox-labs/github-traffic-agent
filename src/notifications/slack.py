@@ -18,14 +18,14 @@ LEVEL_EMOJI = {
 
 
 async def send_slack(
-    config: SlackConfig, subject: str, body: str, level: str = "success"
+    config: SlackConfig, text: str, level: str = "success"
 ) -> None:
     """Send a Slack message via incoming webhook."""
     emoji = LEVEL_EMOJI.get(level, "")
-    text = f"{emoji} *{subject}*\n{body}"
+    payload = f"{emoji} {text}" if emoji else text
 
     async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.post(config.webhook_url, json={"text": text})
+        resp = await client.post(config.webhook_url, json={"text": payload})
         resp.raise_for_status()
 
     logger.info("Slack notification sent")

@@ -11,10 +11,9 @@ from src.models.config import TelegramConfig
 logger = logging.getLogger(__name__)
 
 
-async def send_telegram(config: TelegramConfig, subject: str, body: str) -> None:
+async def send_telegram(config: TelegramConfig, text: str) -> None:
     """Send a Telegram message via Bot API."""
     url = f"https://api.telegram.org/bot{config.bot_token}/sendMessage"
-    text = f"*{subject}*\n\n{body}"
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         resp = await client.post(

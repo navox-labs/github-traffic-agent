@@ -137,6 +137,29 @@ def _check_continuity(data: CollectedData, data_dir: str, result: ValidationResu
         result.passed["continuity"] = False
 
 
+def _get_health_status(data_dir: str) -> str:
+    """Return a short health token from recent audit entries."""
+    audit_file = Path(data_dir) / "memory" / "audit-log.json"
+    if not audit_file.exists():
+        return ""
+
+    try:
+        entries = json.loads(audit_file.read_text())
+        if not entries:
+            return ""
+
+        recent = entries[-5:]
+        errors = [e for e in recent if e.get("status") == "error"]
+        if not errors:
+            return ""
+
+        last_error = errors[-1]
+        error_msg = last_error.get("errors", ["unknown"])[0][:40]
+        return f"last error: {error_msg}"
+    except (json.JSONDecodeError, OSError):
+        return ""
+
+
 def write_audit_entry(
     data: CollectedData,
     validation: ValidationResult,

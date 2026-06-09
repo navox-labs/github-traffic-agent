@@ -42,6 +42,8 @@ class AgentConfig(BaseModel):
     branch: str = ""
     mode: str = "collect"
     notify: NotifyConfig = NotifyConfig()
+    product_context: dict[str, str] | None = None
+    model: str = "claude-sonnet-4-20250514"
 
     @classmethod
     def from_env(cls) -> AgentConfig:
@@ -62,6 +64,8 @@ class AgentConfig(BaseModel):
         if workspace and not os.path.isabs(data_dir):
             data_dir = os.path.join(workspace, data_dir)
 
+        product_context = _parse_product_context()
+
         return cls(
             token=token,
             repos=repos,
@@ -69,7 +73,20 @@ class AgentConfig(BaseModel):
             branch=os.environ.get("INPUT_BRANCH", ""),
             mode=os.environ.get("INPUT_MODE", "collect"),
             notify=notify,
+            product_context=product_context,
+            model=os.environ.get("INPUT_MODEL", "claude-sonnet-4-20250514"),
         )
+
+
+def _parse_product_context() -> dict[str, str] | None:
+    ctx_str = os.environ.get("INPUT_PRODUCT_CONTEXT", "")
+    if not ctx_str:
+        return None
+    try:
+        result: dict[str, str] = json.loads(ctx_str)
+        return result
+    except (json.JSONDecodeError, TypeError):
+        return None
 
 
 def _parse_notify_config() -> NotifyConfig:

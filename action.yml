@@ -26,6 +26,18 @@ inputs:
     description: 'Run mode: collect (daily) or report (bi-weekly analysis)'
     required: false
     default: 'collect'
+  anthropic_api_key:
+    description: 'Anthropic API key for AI-powered briefs (optional; falls back to rule-based)'
+    required: false
+    default: ''
+  model:
+    description: 'Claude model ID for intelligence layer'
+    required: false
+    default: 'claude-sonnet-4-20250514'
+  product_context:
+    description: 'JSON object with repo description and audience, e.g. {"description": "CLI tool", "audience": "developers"}'
+    required: false
+    default: ''
   notify_email:
     description: 'SMTP config as JSON string'
     required: false
@@ -48,6 +60,9 @@ runs:
     INPUT_DATA_DIR: ${{ inputs.data_dir }}
     INPUT_BRANCH: ${{ inputs.branch }}
     INPUT_MODE: ${{ inputs.mode }}
+    ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+    INPUT_MODEL: ${{ inputs.model }}
+    INPUT_PRODUCT_CONTEXT: ${{ inputs.product_context }}
     INPUT_NOTIFY_EMAIL: ${{ inputs.notify_email }}
     INPUT_NOTIFY_TELEGRAM: ${{ inputs.notify_telegram }}
     INPUT_NOTIFY_SLACK: ${{ inputs.notify_slack }}
