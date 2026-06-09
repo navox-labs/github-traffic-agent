@@ -8,8 +8,8 @@ import sys
 
 from src.models.config import AgentConfig
 from src.skills.collect import collect
-from src.skills.notify import notify, NotificationMessage
-from src.skills.store import store, store_and_commit
+from src.skills.notify import NotificationMessage, notify
+from src.skills.store import store_and_commit
 from src.skills.validate import validate, write_audit_entry
 from src.utils.logger import setup_logging
 

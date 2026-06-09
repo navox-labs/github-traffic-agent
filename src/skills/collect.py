@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC
 
 import httpx
 
@@ -28,7 +29,10 @@ def _headers(token: str) -> dict[str, str]:
     }
 
 
-@with_retry(max_attempts=3, base_delay=2.0, exceptions=(httpx.HTTPStatusError, httpx.TransportError))
+_RETRY_EXCEPTIONS = (httpx.HTTPStatusError, httpx.TransportError)
+
+
+@with_retry(max_attempts=3, base_delay=2.0, exceptions=_RETRY_EXCEPTIONS)
 async def _fetch(client: httpx.AsyncClient, url: str) -> dict:  # type: ignore[type-arg]
     resp = await client.get(url)
     resp.raise_for_status()
@@ -46,7 +50,7 @@ async def collect(token: str, repo: str) -> CollectedData:
         paths_data = await _fetch(client, f"{base}/popular/paths")
         referrers_data = await _fetch(client, f"{base}/popular/referrers")
 
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     views = ViewsResponse(**views_data)
     clones = ClonesResponse(**clones_data)
@@ -55,7 +59,7 @@ async def collect(token: str, repo: str) -> CollectedData:
 
     return CollectedData(
         repo=repo,
-        collected_at=datetime.now(timezone.utc),
+        collected_at=datetime.now(UTC),
         views=views,
         clones=clones,
         paths=paths,

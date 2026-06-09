@@ -18,7 +18,9 @@ def test_validate_success(mock_collected_data: CollectedData, tmp_data_dir: str)
     assert result.data_points == 14  # 7 views + 7 clones
 
 
-def test_validate_continuity_with_existing_data(mock_collected_data: CollectedData, tmp_data_dir: str):
+def test_validate_continuity_with_existing_data(
+    mock_collected_data: CollectedData, tmp_data_dir: str
+):
     # Write existing data with a date that creates a gap
     views_file = Path(tmp_data_dir) / "memory" / "views.json"
     views_file.write_text(json.dumps([

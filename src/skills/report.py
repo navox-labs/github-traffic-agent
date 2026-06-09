@@ -61,10 +61,11 @@ def _summary(analysis: AnalysisResult) -> str:
     lines = [
         "## Summary",
         "",
-        f"| Metric | Total | Unique | Daily Avg |",
-        f"|--------|------:|-------:|----------:|",
+        "| Metric | Total | Unique | Daily Avg |",
+        "|--------|------:|-------:|----------:|",
         f"| Views  | {total_views:,} | {total_unique_views:,} | {total_views / max(days, 1):.1f} |",
-        f"| Clones | {total_clones:,} | {total_unique_clones:,} | {total_clones / max(days, 1):.1f} |",
+        f"| Clones | {total_clones:,} | {total_unique_clones:,} "
+        f"| {total_clones / max(days, 1):.1f} |",
         "",
         f"*Based on {days} days of data*",
     ]

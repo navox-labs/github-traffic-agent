@@ -51,7 +51,11 @@ async def test_notify_channel_failure_doesnt_block_others():
     msg = NotificationMessage(subject="Test", body="Body")
 
     with (
-        patch("src.notifications.telegram.send_telegram", new_callable=AsyncMock, side_effect=Exception("fail")),
+        patch(
+            "src.notifications.telegram.send_telegram",
+            new_callable=AsyncMock,
+            side_effect=Exception("fail"),
+        ),
         patch("src.notifications.slack.send_slack", new_callable=AsyncMock) as mock_slack,
     ):
         await notify(config, msg)

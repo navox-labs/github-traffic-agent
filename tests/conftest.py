@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -11,10 +11,8 @@ from src.models.schemas import (
     CollectedData,
     PopularPath,
     PopularReferrer,
-    TrafficCount,
     ViewsResponse,
 )
-
 
 MOCK_VIEWS_RESPONSE = {
     "count": 100,
@@ -46,7 +44,12 @@ MOCK_CLONES_RESPONSE = {
 
 MOCK_PATHS_RESPONSE = [
     {"path": "/navox-labs/repo", "title": "repo", "count": 50, "uniques": 30},
-    {"path": "/navox-labs/repo/blob/main/README.md", "title": "README.md", "count": 20, "uniques": 15},
+    {
+        "path": "/navox-labs/repo/blob/main/README.md",
+        "title": "README.md",
+        "count": 20,
+        "uniques": 15,
+    },
 ]
 
 MOCK_REFERRERS_RESPONSE = [
@@ -59,7 +62,7 @@ MOCK_REFERRERS_RESPONSE = [
 def mock_collected_data() -> CollectedData:
     return CollectedData(
         repo="navox-labs/test-repo",
-        collected_at=datetime(2026, 6, 1, 3, 0, 0, tzinfo=timezone.utc),
+        collected_at=datetime(2026, 6, 1, 3, 0, 0, tzinfo=UTC),
         views=ViewsResponse(**MOCK_VIEWS_RESPONSE),
         clones=ClonesResponse(**MOCK_CLONES_RESPONSE),
         paths=[PopularPath(**p) for p in MOCK_PATHS_RESPONSE],
@@ -73,3 +76,23 @@ def tmp_data_dir(tmp_path):
     memory_dir = tmp_path / "traffic-data" / "memory"
     memory_dir.mkdir(parents=True)
     return str(tmp_path / "traffic-data")
+
+
+def mock_traffic_api(repo: str) -> None:
+    """Set up respx mocks for all traffic API endpoints."""
+    import httpx
+    import respx
+
+    base = f"https://api.github.com/repos/{repo}/traffic"
+    respx.get(f"{base}/views").mock(
+        return_value=httpx.Response(200, json=MOCK_VIEWS_RESPONSE)
+    )
+    respx.get(f"{base}/clones").mock(
+        return_value=httpx.Response(200, json=MOCK_CLONES_RESPONSE)
+    )
+    respx.get(f"{base}/popular/paths").mock(
+        return_value=httpx.Response(200, json=MOCK_PATHS_RESPONSE)
+    )
+    respx.get(f"{base}/popular/referrers").mock(
+        return_value=httpx.Response(200, json=MOCK_REFERRERS_RESPONSE)
+    )

@@ -6,25 +6,18 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-import httpx
 import pytest
 import respx
 
-from src.models.config import AgentConfig, NotifyConfig
 from src.agent import run_collect
-from tests.conftest import (
-    MOCK_CLONES_RESPONSE,
-    MOCK_PATHS_RESPONSE,
-    MOCK_REFERRERS_RESPONSE,
-    MOCK_VIEWS_RESPONSE,
-)
+from src.models.config import AgentConfig, NotifyConfig
+from tests.conftest import mock_traffic_api
 
 
 @pytest.mark.asyncio
 async def test_full_collect_pipeline(tmp_path):
     data_dir = str(tmp_path / "traffic-data")
     repo = "navox-labs/test-repo"
-    base = f"https://api.github.com/repos/{repo}/traffic"
 
     config = AgentConfig(
         token="fake-token",
@@ -35,12 +28,11 @@ async def test_full_collect_pipeline(tmp_path):
     )
 
     with respx.mock:
-        respx.get(f"{base}/views").mock(return_value=httpx.Response(200, json=MOCK_VIEWS_RESPONSE))
-        respx.get(f"{base}/clones").mock(return_value=httpx.Response(200, json=MOCK_CLONES_RESPONSE))
-        respx.get(f"{base}/popular/paths").mock(return_value=httpx.Response(200, json=MOCK_PATHS_RESPONSE))
-        respx.get(f"{base}/popular/referrers").mock(return_value=httpx.Response(200, json=MOCK_REFERRERS_RESPONSE))
+        mock_traffic_api(repo)
 
-        with patch("src.skills.store.commit_and_push", return_value=True):
+        with patch(
+            "src.skills.store.commit_and_push", return_value=True
+        ):
             await run_collect(config)
 
     # Verify data files were created

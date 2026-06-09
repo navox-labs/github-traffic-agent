@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from src.models.schemas import AuditEntry, CollectedData, DailyTrafficRecord
@@ -137,7 +137,7 @@ def write_audit_entry(
     status = "success" if validation.ok else ("warning" if validation.warnings else "error")
 
     entry = AuditEntry(
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
         repo=data.repo,
         status=status,
         data_points=validation.data_points,

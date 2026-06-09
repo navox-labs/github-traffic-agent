@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from src.models.schemas import Prediction, TrendData
+from src.models.schemas import TrendData
 from src.skills.analyze import AnalysisResult
 from src.skills.propose import propose
 
