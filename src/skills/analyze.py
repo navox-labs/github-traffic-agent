@@ -136,16 +136,24 @@ def _detect_anomalies(views_df: pd.DataFrame, clones_df: pd.DataFrame) -> list[A
 
 
 def _aggregate_snapshots(snapshot_dir: Path) -> list[dict[str, object]]:
-    """Aggregate all daily snapshots to find top items overall."""
+    """Use the most recent snapshot as the current picture.
+
+    Each snapshot already contains a 14-day rolling total from the GitHub API,
+    so summing across snapshots would double-count overlapping windows.
+    """
     if not snapshot_dir.exists():
         return []
 
-    aggregated: dict[str, int] = {}
-    for f in sorted(snapshot_dir.glob("*.json")):
-        items = json.loads(f.read_text())
-        for item in items:
-            key = item.get("referrer") or item.get("path", "unknown")
-            aggregated[key] = aggregated.get(key, 0) + item.get("count", 0)
+    files = sorted(snapshot_dir.glob("*.json"))
+    if not files:
+        return []
 
-    sorted_items = sorted(aggregated.items(), key=lambda x: x[1], reverse=True)
-    return [{"name": k, "total_count": v} for k, v in sorted_items[:10]]
+    # Use the latest snapshot — it has the most current 14-day window
+    items = json.loads(files[-1].read_text())
+    result: list[dict[str, object]] = []
+    for item in items:
+        key = item.get("referrer") or item.get("path", "unknown")
+        result.append({"name": key, "total_count": item.get("count", 0)})
+
+    result.sort(key=lambda x: int(str(x["total_count"])), reverse=True)
+    return result[:10]

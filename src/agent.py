@@ -16,6 +16,37 @@ from src.utils.logger import setup_logging
 logger = logging.getLogger(__name__)
 
 
+def _write_failure_audit(repo: str, exc: Exception, data_dir: str) -> None:
+    """Write an audit entry when collection fails, so failures leave a trace."""
+    try:
+        import json
+        from datetime import UTC, datetime
+        from pathlib import Path
+
+        from src.models.schemas import AuditEntry
+        from src.skills.store import _atomic_write
+
+        audit_file = Path(data_dir) / "memory" / "audit-log.json"
+        audit_file.parent.mkdir(parents=True, exist_ok=True)
+
+        entries: list[dict] = []  # type: ignore[type-arg]
+        if audit_file.exists():
+            entries = json.loads(audit_file.read_text())
+
+        entry = AuditEntry(
+            timestamp=datetime.now(UTC),
+            repo=repo,
+            status="error",
+            data_points=0,
+            validation_results={},
+            errors=[str(exc)],
+        )
+        entries.append(entry.model_dump(mode="json"))
+        _atomic_write(audit_file, json.dumps(entries, indent=2, default=str))
+    except Exception as audit_exc:
+        logger.error("Failed to write failure audit entry: %s", audit_exc)
+
+
 async def run_collect(config: AgentConfig) -> None:
     """Daily pipeline: Collect -> Validate -> Store -> Notify."""
     for repo in config.repos:
@@ -60,6 +91,10 @@ async def run_collect(config: AgentConfig) -> None:
 
         except Exception as exc:
             logger.exception("Failed to process %s: %s", repo, exc)
+
+            # Write audit entry for failures so monitoring has no blind spots
+            _write_failure_audit(repo, exc, config.data_dir)
+
             msg = NotificationMessage(
                 subject=f"Traffic Agent Error: {repo}",
                 body=f"Failed to collect traffic data for {repo}: {exc}",
@@ -87,7 +122,7 @@ async def run_report(config: AgentConfig) -> None:
             from src.utils.git import commit_and_push
 
             commit_and_push(
-                [report_path, str(report_path)],
+                [report_path],
                 f"traffic: bi-weekly report for {repo}",
                 config.branch,
             )

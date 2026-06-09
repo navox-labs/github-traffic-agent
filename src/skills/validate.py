@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from src.models.schemas import AuditEntry, CollectedData, DailyTrafficRecord
@@ -73,6 +73,22 @@ def _check_completeness(data: CollectedData, result: ValidationResult) -> None:
     if not has_views and not has_clones:
         result.warnings.append("No views or clones data returned (repo may have zero traffic)")
 
+    # Check for all-zeros: may indicate a permissions/visibility issue
+    all_zero = True
+    if has_views:
+        all_zero = all_zero and all(v.count == 0 and v.uniques == 0 for v in data.views.views)
+    if has_clones:
+        all_zero = all_zero and all(c.count == 0 and c.uniques == 0 for c in data.clones.clones)
+
+    all_empty_snapshots = not data.paths and not data.referrers
+
+    if (has_views or has_clones) and all_zero and all_empty_snapshots:
+        result.warnings.append(
+            "All traffic counts are zero with empty referrers/paths. "
+            "This may indicate a token permissions issue or repo visibility "
+            "problem rather than genuinely zero traffic."
+        )
+
     result.passed["completeness"] = True
     logger.info("Completeness check passed: %d views, %d clones entries", views_count, clones_count)
 
@@ -92,7 +108,7 @@ def _check_continuity(data: CollectedData, data_dir: str, result: ValidationResu
 
         records = [DailyTrafficRecord(**r) for r in existing]
         last_stored = max(r.date for r in records)
-        today = date.today()
+        today = datetime.now(UTC).date()
 
         if data.views.views:
             earliest_new = min(v.timestamp.date() for v in data.views.views)
@@ -146,5 +162,8 @@ def write_audit_entry(
         warnings=validation.warnings,
     )
     entries.append(entry.model_dump(mode="json"))
-    audit_file.write_text(json.dumps(entries, indent=2, default=str))
+
+    from src.skills.store import _atomic_write
+
+    _atomic_write(audit_file, json.dumps(entries, indent=2, default=str))
     logger.info("Audit entry written: %s", status)

@@ -4,12 +4,31 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import tempfile
 from pathlib import Path
 
 from src.models.schemas import CollectedData, DailyTrafficRecord
 from src.utils.git import commit_and_push
 
 logger = logging.getLogger(__name__)
+
+
+def _atomic_write(filepath: Path, content: str) -> None:
+    """Write content to file atomically via temp file + os.replace()."""
+    filepath.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(dir=filepath.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(content)
+        os.replace(tmp_path, filepath)
+    except BaseException:
+        # Clean up temp file on any failure
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
 
 def store(data: CollectedData, data_dir: str, branch: str = "") -> list[str]:
@@ -30,7 +49,7 @@ def store(data: CollectedData, data_dir: str, branch: str = "") -> list[str]:
             for v in data.views.views
         ],
     )
-    views_file.write_text(json.dumps(views_records, indent=2, default=str))
+    _atomic_write(views_file, json.dumps(views_records, indent=2, default=str))
     modified.append(str(views_file))
 
     # Store clones
@@ -44,7 +63,7 @@ def store(data: CollectedData, data_dir: str, branch: str = "") -> list[str]:
             for c in data.clones.clones
         ],
     )
-    clones_file.write_text(json.dumps(clones_records, indent=2, default=str))
+    _atomic_write(clones_file, json.dumps(clones_records, indent=2, default=str))
     modified.append(str(clones_file))
 
     # Store paths snapshot
@@ -52,8 +71,8 @@ def store(data: CollectedData, data_dir: str, branch: str = "") -> list[str]:
     paths_dir = base / "paths"
     paths_dir.mkdir(parents=True, exist_ok=True)
     paths_file = paths_dir / f"{today_str}.json"
-    paths_file.write_text(
-        json.dumps([p.model_dump() for p in data.paths], indent=2)
+    _atomic_write(
+        paths_file, json.dumps([p.model_dump() for p in data.paths], indent=2)
     )
     modified.append(str(paths_file))
 
@@ -61,8 +80,8 @@ def store(data: CollectedData, data_dir: str, branch: str = "") -> list[str]:
     referrers_dir = base / "referrers"
     referrers_dir.mkdir(parents=True, exist_ok=True)
     referrers_file = referrers_dir / f"{today_str}.json"
-    referrers_file.write_text(
-        json.dumps([r.model_dump() for r in data.referrers], indent=2)
+    _atomic_write(
+        referrers_file, json.dumps([r.model_dump() for r in data.referrers], indent=2)
     )
     modified.append(str(referrers_file))
 
