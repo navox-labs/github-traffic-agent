@@ -110,7 +110,7 @@ def _detect_anomalies(views_df: pd.DataFrame, clones_df: pd.DataFrame) -> list[A
         if len(df) < 14:
             continue
 
-        values = df["count"].values.astype(float)
+        values = np.asarray(df["count"].values, dtype=float)
         mean = float(np.mean(values))
         std = float(np.std(values))
 

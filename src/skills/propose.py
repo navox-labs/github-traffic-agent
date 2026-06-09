@@ -61,7 +61,7 @@ def propose(analysis: AnalysisResult, predictions: list[Prediction]) -> list[Pro
     # Check referrer spikes
     for ref in analysis.top_referrers[:3]:
         name = str(ref["name"])
-        count = int(ref["total_count"])  # type: ignore[arg-type]
+        count = int(str(ref["total_count"]))
         if count > 50:
             proposals.append(
                 Proposal(

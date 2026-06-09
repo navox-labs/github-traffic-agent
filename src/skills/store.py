@@ -107,9 +107,9 @@ def _merge_traffic(
         by_date[date_key] = record
 
     # New records overwrite existing for same date (fresher data)
-    for record in new_records:
-        date_key = str(record.date)
-        by_date[date_key] = record.model_dump(mode="json")
+    for new_record in new_records:
+        date_key = str(new_record.date)
+        by_date[date_key] = new_record.model_dump(mode="json")
 
     # Sort by date
     sorted_records = sorted(by_date.values(), key=lambda r: str(r["date"]))
