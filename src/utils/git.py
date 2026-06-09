@@ -31,6 +31,11 @@ def git_run(*args: str, cwd: str | None = None) -> str:
 
 
 def configure_git(cwd: str | None = None) -> None:
+    # Mark workspace as safe (required when running as different user in Docker)
+    workspace = cwd or os.environ.get("GITHUB_WORKSPACE", "")
+    if workspace:
+        git_run("config", "--global", "safe.directory", workspace)
+
     git_run("config", "user.name", "github-traffic-agent[bot]", cwd=cwd)
     git_run("config", "user.email", "traffic-agent@users.noreply.github.com", cwd=cwd)
 
