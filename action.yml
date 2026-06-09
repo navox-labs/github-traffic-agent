@@ -1,0 +1,53 @@
+name: 'GitHub Traffic Agent'
+description: 'Autonomous agent that collects, stores, and analyzes GitHub traffic data beyond the 14-day retention limit'
+author: 'navox-labs'
+
+branding:
+  icon: 'bar-chart-2'
+  color: 'blue'
+
+inputs:
+  token:
+    description: 'GitHub PAT with repo scope'
+    required: true
+  repos:
+    description: 'Comma-separated owner/repo list (defaults to current repo)'
+    required: false
+    default: ''
+  data_dir:
+    description: 'Directory for data files'
+    required: false
+    default: 'traffic-data/'
+  branch:
+    description: 'Branch to commit data to'
+    required: false
+    default: ''
+  mode:
+    description: 'Run mode: collect (daily) or report (bi-weekly analysis)'
+    required: false
+    default: 'collect'
+  notify_email:
+    description: 'SMTP config as JSON string'
+    required: false
+    default: ''
+  notify_telegram:
+    description: 'Telegram config as bot_token:chat_id'
+    required: false
+    default: ''
+  notify_slack:
+    description: 'Slack webhook URL'
+    required: false
+    default: ''
+
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
+  env:
+    INPUT_TOKEN: ${{ inputs.token }}
+    INPUT_REPOS: ${{ inputs.repos }}
+    INPUT_DATA_DIR: ${{ inputs.data_dir }}
+    INPUT_BRANCH: ${{ inputs.branch }}
+    INPUT_MODE: ${{ inputs.mode }}
+    INPUT_NOTIFY_EMAIL: ${{ inputs.notify_email }}
+    INPUT_NOTIFY_TELEGRAM: ${{ inputs.notify_telegram }}
+    INPUT_NOTIFY_SLACK: ${{ inputs.notify_slack }}
