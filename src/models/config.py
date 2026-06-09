@@ -56,10 +56,16 @@ class AgentConfig(BaseModel):
 
         notify = _parse_notify_config()
 
+        # Resolve data_dir relative to GITHUB_WORKSPACE when running in Actions
+        data_dir = os.environ.get("INPUT_DATA_DIR", "traffic-data/")
+        workspace = os.environ.get("GITHUB_WORKSPACE", "")
+        if workspace and not os.path.isabs(data_dir):
+            data_dir = os.path.join(workspace, data_dir)
+
         return cls(
             token=token,
             repos=repos,
-            data_dir=os.environ.get("INPUT_DATA_DIR", "traffic-data/"),
+            data_dir=data_dir,
             branch=os.environ.get("INPUT_BRANCH", ""),
             mode=os.environ.get("INPUT_MODE", "collect"),
             notify=notify,
