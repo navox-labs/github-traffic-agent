@@ -67,7 +67,7 @@ def commit_and_push(
     configure_git(cwd=resolved_cwd)
 
     for f in files:
-        git_run("add", f, cwd=resolved_cwd)
+        git_run("add", "-f", f, cwd=resolved_cwd)
 
     # Check if there are staged changes
     result = subprocess.run(
