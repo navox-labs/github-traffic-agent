@@ -5,6 +5,16 @@ Autonomous agent that collects, validates, stores, and analyzes GitHub repositor
 [![CI](https://github.com/navox-labs/github-traffic-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/navox-labs/github-traffic-agent/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
+## The Story
+
+As a solo founder who is also a builder, I can't live without my AI agents. I built my own team of agents to help me take my concepts from start to finish, while I handle my own marketing, posting, and blogging across many channels.
+
+One of the most important signals that drives my product decisions is repo traffic. I build in public, open-source, and solo -- so monitoring traffic and paying attention to trends is a critical part of product development.
+
+I use GitHub, and unfortunately GitHub only keeps and displays **2 weeks** of traffic data. I really wish I had built this agent earlier. I remember when my network repo approached **1,000 clones in a single day**, but I just didn't keep any record of it. Plus, I only discovered GitHub Insights traffic recently.
+
+I didn't want this agent to just be a data collector. I wanted a proactive, fully experienced data scientist agent that collects, analyzes, predicts, and proposes -- and sends me a notification just in case I've got my hands busy somewhere else.
+
 ## Why?
 
 GitHub only keeps traffic data (views, clones, popular paths, referrers) for **14 days**. After that, it's gone forever. This agent runs as a GitHub Action on a daily schedule, automatically preserving your traffic data and generating analysis reports.
