@@ -51,12 +51,21 @@ Each Brief's actions are persisted. Next report, the agent passes prior actions 
 
 ## Quick Start
 
-### Step 1: Create a GitHub PAT
+### Step 1: Create a Private Data Repo
 
-The agent needs a Personal Access Token to read traffic data (GitHub requires push access for traffic endpoints).
+Traffic data is private by design -- GitHub restricts it to repo admins. The agent stores all data in a **separate private repo** you control, so it's never exposed even if your monitored repos are public.
+
+Create a private repo (e.g. `my-org/traffic-data`):
+```bash
+gh repo create my-org/traffic-data --private
+```
+
+### Step 2: Create a GitHub PAT
+
+The agent needs a Personal Access Token to read traffic data and write to your data repo.
 
 1. Go to [GitHub Settings > Fine-grained tokens](https://github.com/settings/tokens?type=beta)
-2. Create a token with **Repository access** for your target repo(s)
+2. Create a token with **Repository access** for your target repo(s) **and** your data repo
 3. Grant **Read and write** permission for **Contents** and **Read-only** for **Metadata**
 4. Alternatively, use a classic token with `repo` scope
 
@@ -65,9 +74,9 @@ Add it as a repository secret:
 gh secret set TRAFFIC_TOKEN
 ```
 
-### Step 2: Add the Workflow
+### Step 3: Add the Workflow
 
-Create `.github/workflows/traffic.yml` in your repo:
+Create `.github/workflows/traffic.yml` in the repo you want to monitor:
 
 ```yaml
 name: GitHub Traffic Agent
@@ -86,31 +95,31 @@ on:
 jobs:
   traffic:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write          # Needed to commit data back to the repo
     steps:
-      - uses: actions/checkout@v4
       - uses: navox-labs/github-traffic-agent@v1
         with:
           token: ${{ secrets.TRAFFIC_TOKEN }}
+          data_repo: my-org/traffic-data       # your private data repo
           mode: ${{ github.event.schedule == '0 4 1,15 * *' && 'report' || github.event.inputs.mode || 'collect' }}
 ```
 
 > **How the mode expression works:** When the 1st/15th cron fires, mode is set to `report`. For the daily cron or manual dispatch, it uses the selected mode (defaulting to `collect`).
 
-### Step 3: Run It
+> **Monitoring multiple repos?** Use the same `data_repo` across all your workflows. Each monitored repo gets its own subfolder automatically.
+
+### Step 4: Run It
 
 Trigger the first collection manually:
 ```bash
 gh workflow run traffic.yml -f mode=collect
 ```
 
-The agent will collect your traffic data and commit it to `traffic-data/` in your repo. Let it run daily for a few days to build up history, then trigger a report:
+The agent will collect your traffic data and commit it to your private data repo. Let it run daily for a few days to build up history, then trigger a report:
 ```bash
 gh workflow run traffic.yml -f mode=report
 ```
 
-That's it -- the agent is now collecting daily and reporting bi-weekly on autopilot.
+That's it -- the agent is now collecting daily and reporting bi-weekly on autopilot. Your traffic data stays private.
 
 ### Step 4: (Optional) Add AI-Powered Briefs
 
@@ -154,8 +163,9 @@ Give Claude context about your project for smarter, more relevant briefs:
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
 | `token` | Yes | -- | GitHub PAT with `repo` scope |
-| `repos` | No | current repo | Comma-separated `owner/repo` list |
-| `data_dir` | No | `traffic-data/` | Directory for data files |
+| `data_repo` | Yes | -- | Private repo to store traffic data (`owner/repo`) |
+| `repos` | No | current repo | Comma-separated `owner/repo` list to monitor |
+| `data_dir` | No | `traffic-data/` | Directory for data files within data repo |
 | `branch` | No | default branch | Branch to commit data to |
 | `mode` | No | `collect` | `collect` or `report` |
 | `anthropic_api_key` | No | -- | Anthropic API key for AI briefs |
@@ -167,18 +177,22 @@ Give Claude context about your project for smarter, more relevant briefs:
 
 ## Data Structure
 
+All data is stored in your private data repo, organized by monitored repo:
+
 ```
-traffic-data/
-  memory/
-    views.json              # Historical daily views
-    clones.json             # Historical daily clones
-    paths/                  # Daily popular paths snapshots
-    referrers/              # Daily popular referrers snapshots
-    audit-log.json          # Run audit log
-    brief-actions.json      # Persisted actions for feedback loop
-  reports/
-    YYYY-MM-DD-report.md    # Analysis reports (committed artifacts)
-  exports/
+your-private-data-repo/
+  traffic-data/
+    owner/repo-name/              # One folder per monitored repo
+      memory/
+        views.json                # Historical daily views
+        clones.json               # Historical daily clones
+        paths/                    # Daily popular paths snapshots
+        referrers/                # Daily popular referrers snapshots
+        audit-log.json            # Run audit log
+        brief-actions.json        # Persisted actions for feedback loop
+      reports/
+        YYYY-MM-DD-report.md      # Analysis reports
+      exports/
     YYYY-MM-DD_to_YYYY-MM-DD-traffic.csv  # Bi-weekly CSV snapshots
 ```
 
