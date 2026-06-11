@@ -53,24 +53,21 @@ Each Brief's actions are persisted. Next report, the agent passes prior actions 
 
 ### Step 1: Create a GitHub PAT
 
-Go to [GitHub Settings > Personal access tokens](https://github.com/settings/tokens) and create a token with `repo` scope. This is needed to read traffic data (GitHub requires push access).
+The agent needs a Personal Access Token to read traffic data (GitHub requires push access for traffic endpoints).
+
+1. Go to [GitHub Settings > Fine-grained tokens](https://github.com/settings/tokens?type=beta)
+2. Create a token with **Repository access** for your target repo(s)
+3. Grant **Read and write** permission for **Contents** and **Read-only** for **Metadata**
+4. Alternatively, use a classic token with `repo` scope
 
 Add it as a repository secret:
 ```bash
 gh secret set TRAFFIC_TOKEN
 ```
 
-### Step 2: (Optional) Add an Anthropic API Key
+### Step 2: Add the Workflow
 
-For AI-powered briefs, add your Anthropic API key. Without it, the agent still works -- it just uses rule-based summaries instead of Claude.
-
-```bash
-gh secret set ANTHROPIC_API_KEY
-```
-
-### Step 3: Add the Workflow
-
-Create `.github/workflows/traffic.yml`:
+Create `.github/workflows/traffic.yml` in your repo:
 
 ```yaml
 name: GitHub Traffic Agent
@@ -90,31 +87,49 @@ jobs:
   traffic:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write          # Needed to commit data back to the repo
     steps:
       - uses: actions/checkout@v4
-      - uses: navox-labs/github-traffic-agent@main
+      - uses: navox-labs/github-traffic-agent@v1
         with:
           token: ${{ secrets.TRAFFIC_TOKEN }}
           mode: ${{ github.event.schedule == '0 4 1,15 * *' && 'report' || github.event.inputs.mode || 'collect' }}
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
-### Step 4: Run It
+> **How the mode expression works:** When the 1st/15th cron fires, mode is set to `report`. For the daily cron or manual dispatch, it uses the selected mode (defaulting to `collect`).
+
+### Step 3: Run It
 
 Trigger the first collection manually:
 ```bash
 gh workflow run traffic.yml -f mode=collect
 ```
 
-Once you have a few days of data, trigger a report:
+The agent will collect your traffic data and commit it to `traffic-data/` in your repo. Let it run daily for a few days to build up history, then trigger a report:
 ```bash
 gh workflow run traffic.yml -f mode=report
 ```
 
+That's it -- the agent is now collecting daily and reporting bi-weekly on autopilot.
+
+### Step 4: (Optional) Add AI-Powered Briefs
+
+For Claude-powered analysis instead of rule-based summaries, add your Anthropic API key:
+
+```bash
+gh secret set ANTHROPIC_API_KEY
+```
+
+Then add it to your workflow:
+```yaml
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+> Without an API key, the agent still works -- it falls back to deterministic rule-based summaries. The AI layer is optional but recommended.
+
 ### Step 5: (Optional) Add Notifications
 
-Add any combination of channels to your workflow:
+Send briefs and collection digests to Slack, Telegram, and/or email. Add any combination:
 
 ```yaml
           notify_slack: ${{ secrets.SLACK_WEBHOOK }}
@@ -122,9 +137,13 @@ Add any combination of channels to your workflow:
           notify_email: ${{ secrets.EMAIL_CONFIG }}          # JSON string
 ```
 
+**Slack setup:** Create an [Incoming Webhook](https://api.slack.com/messaging/webhooks) and store the URL as `SLACK_WEBHOOK`.
+
+**Telegram setup:** Create a bot via [@BotFather](https://t.me/botfather), get your chat ID, and store as `bot_token:chat_id` in `TELEGRAM_CONFIG`.
+
 ### Step 6: (Optional) Add Product Context
 
-Give Claude context about your repo for smarter briefs:
+Give Claude context about your project for smarter, more relevant briefs:
 
 ```yaml
           product_context: '{"description": "CLI tool for managing Docker containers", "audience": "DevOps engineers"}'
@@ -159,6 +178,8 @@ traffic-data/
     brief-actions.json      # Persisted actions for feedback loop
   reports/
     YYYY-MM-DD-report.md    # Analysis reports (committed artifacts)
+  exports/
+    YYYY-MM-DD_to_YYYY-MM-DD-traffic.csv  # Bi-weekly CSV snapshots
 ```
 
 ## Design Principles
@@ -174,7 +195,7 @@ traffic-data/
 # Install
 pip install -e ".[dev]"
 
-# Tests (61 tests)
+# Tests (66 tests)
 pytest tests/ -v
 
 # Lint
