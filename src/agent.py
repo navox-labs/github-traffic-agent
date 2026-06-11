@@ -4,16 +4,31 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import shutil
 import sys
 
 from src.models.config import AgentConfig
 from src.skills.collect import collect
 from src.skills.notify import BriefNotification, NotificationMessage, notify
-from src.skills.store import store_and_commit
 from src.skills.validate import validate, write_audit_entry
+from src.utils.git import clone_data_repo
 from src.utils.logger import setup_logging
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_data_dir(config: AgentConfig, repo: str) -> str:
+    """Resolve the data directory for a specific repo within the data repo clone."""
+    # Sanitize repo name for use as directory (owner/repo -> owner/repo)
+    return os.path.join(config.data_dir, repo)
+
+
+def _setup_data_repo(config: AgentConfig) -> str:
+    """Clone the data repo and return the clone path."""
+    clone_path = clone_data_repo(config.data_repo, config.branch)
+    # Override data_dir to be inside the cloned repo
+    return clone_path
 
 
 def _write_failure_audit(repo: str, exc: Exception, data_dir: str) -> None:
@@ -49,58 +64,76 @@ def _write_failure_audit(repo: str, exc: Exception, data_dir: str) -> None:
 
 async def run_collect(config: AgentConfig) -> None:
     """Daily pipeline: Collect -> Validate -> Store -> Notify."""
-    for repo in config.repos:
-        logger.info("=== Processing %s ===", repo)
-        try:
-            # Collect
-            data = await collect(config.token, repo)
-            logger.info("Collected data for %s", repo)
+    clone_path = _setup_data_repo(config)
 
-            # Validate
-            result = validate(data, config.data_dir)
-            write_audit_entry(data, result, config.data_dir)
+    try:
+        for repo in config.repos:
+            logger.info("=== Processing %s ===", repo)
+            data_dir = os.path.join(clone_path, config.data_dir, repo)
 
-            if not result.ok:
+            try:
+                # Collect
+                data = await collect(config.token, repo)
+                logger.info("Collected data for %s", repo)
+
+                # Validate
+                result = validate(data, data_dir)
+                write_audit_entry(data, result, data_dir)
+
+                if not result.ok:
+                    msg = NotificationMessage(
+                        subject=f"Traffic Agent Error: {repo}",
+                        body=f"Validation failed for {repo}.\nErrors: {result.errors}",
+                        level="error",
+                    )
+                    await notify(config.notify, msg)
+                    continue
+
+                # Store (without commit — we commit once at the end)
+                from src.skills.store import store
+
+                store(data, data_dir, config.branch)
+
+                # Notify success
+                views_total = sum(v.count for v in data.views.views)
+                clones_total = sum(c.count for c in data.clones.clones)
+                body = (
+                    f"Collected {views_total} views, {clones_total} clones for {repo}.\n"
+                    f"All validations passed."
+                )
+                if result.warnings:
+                    body += f"\nWarnings: {', '.join(result.warnings)}"
+
+                msg = NotificationMessage(
+                    subject=f"Traffic Agent: {repo}",
+                    body=body,
+                    level="warning" if result.warnings else "success",
+                )
+                await notify(config.notify, msg)
+
+            except Exception as exc:
+                logger.exception("Failed to process %s: %s", repo, exc)
+                _write_failure_audit(repo, exc, data_dir)
+
                 msg = NotificationMessage(
                     subject=f"Traffic Agent Error: {repo}",
-                    body=f"Validation failed for {repo}.\nErrors: {result.errors}",
+                    body=f"Failed to collect traffic data for {repo}: {exc}",
                     level="error",
                 )
                 await notify(config.notify, msg)
-                continue
 
-            # Store & commit
-            store_and_commit(data, config.data_dir, config.branch)
+        # Commit and push all changes to data repo at once
+        from src.utils.git import commit_and_push
 
-            # Notify success
-            views_total = sum(v.count for v in data.views.views)
-            clones_total = sum(c.count for c in data.clones.clones)
-            body = (
-                f"Collected {views_total} views, {clones_total} clones for {repo}.\n"
-                f"All validations passed."
-            )
-            if result.warnings:
-                body += f"\nWarnings: {', '.join(result.warnings)}"
-
-            msg = NotificationMessage(
-                subject=f"Traffic Agent: {repo}",
-                body=body,
-                level="warning" if result.warnings else "success",
-            )
-            await notify(config.notify, msg)
-
-        except Exception as exc:
-            logger.exception("Failed to process %s: %s", repo, exc)
-
-            # Write audit entry for failures so monitoring has no blind spots
-            _write_failure_audit(repo, exc, config.data_dir)
-
-            msg = NotificationMessage(
-                subject=f"Traffic Agent Error: {repo}",
-                body=f"Failed to collect traffic data for {repo}: {exc}",
-                level="error",
-            )
-            await notify(config.notify, msg)
+        repos_str = ", ".join(config.repos)
+        commit_and_push(
+            ["."],
+            f"traffic: collect data for {repos_str}",
+            config.branch,
+            cwd=clone_path,
+        )
+    finally:
+        shutil.rmtree(clone_path, ignore_errors=True)
 
 
 async def run_report(config: AgentConfig) -> None:
@@ -113,73 +146,74 @@ async def run_report(config: AgentConfig) -> None:
     from src.skills.report import generate_report
     from src.skills.validate import _get_health_status
 
-    for repo in config.repos:
-        logger.info("=== Generating report for %s ===", repo)
-        try:
-            analysis = analyze(repo, config.data_dir)
-            predictions = predict(repo, config.data_dir)
-            proposals = propose(analysis, predictions)
+    clone_path = _setup_data_repo(config)
 
-            # Generate long report as committed artifact
-            report_path = generate_report(repo, config.data_dir, analysis, predictions, proposals)
+    try:
+        for repo in config.repos:
+            logger.info("=== Generating report for %s ===", repo)
+            data_dir = os.path.join(clone_path, config.data_dir, repo)
 
-            # Export CSV snapshot for long-term archival
-            csv_path = export_csv(repo, config.data_dir)
+            try:
+                analysis = analyze(repo, data_dir)
+                predictions = predict(repo, data_dir)
+                proposals = propose(analysis, predictions)
 
-            # Intelligence layer: LLM brief (or fallback)
-            prior_actions = load_prior_actions(config.data_dir)
-            health_status = _get_health_status(config.data_dir)
-            product_context = config.product_context or {"repo": repo}
-            if "repo" not in product_context:
-                product_context["repo"] = repo
+                # Generate long report as committed artifact
+                generate_report(repo, data_dir, analysis, predictions, proposals)
 
-            brief = generate_brief(
-                analysis=analysis,
-                predictions=predictions,
-                proposals=proposals,
-                product_context=product_context,
-                prior_actions=prior_actions,
-                health_status=health_status,
-                data_dir=config.data_dir,
-                model=config.model,
-            )
+                # Export CSV snapshot for long-term archival
+                export_csv(repo, data_dir)
 
-            # Persist actions for next run's feedback loop
-            if brief.actions:
-                save_actions(brief, config.data_dir)
+                # Intelligence layer: LLM brief (or fallback)
+                prior_actions = load_prior_actions(data_dir)
+                health_status = _get_health_status(data_dir)
+                product_context = config.product_context or {"repo": repo}
+                if "repo" not in product_context:
+                    product_context["repo"] = repo
 
-            # Commit report + actions file (actions must persist across runs)
-            from pathlib import Path
+                brief = generate_brief(
+                    analysis=analysis,
+                    predictions=predictions,
+                    proposals=proposals,
+                    product_context=product_context,
+                    prior_actions=prior_actions,
+                    health_status=health_status,
+                    data_dir=data_dir,
+                    model=config.model,
+                )
 
-            from src.utils.git import commit_and_push
+                # Persist actions for next run's feedback loop
+                if brief.actions:
+                    save_actions(brief, data_dir)
 
-            commit_files = [report_path, csv_path]
-            actions_file = str(
-                Path(config.data_dir) / "memory" / "brief-actions.json"
-            )
-            if Path(actions_file).exists():
-                commit_files.append(actions_file)
-            commit_and_push(
-                commit_files,
-                f"traffic: bi-weekly report for {repo}",
-                config.branch,
-            )
+                # Notify with the Brief — each channel renders natively
+                level = "warning" if brief.alert else "success"
+                await notify(
+                    config.notify,
+                    BriefNotification(brief=brief, repo=repo, level=level),
+                )
 
-            # Notify with the Brief — each channel renders natively
-            level = "warning" if brief.alert else "success"
-            await notify(
-                config.notify,
-                BriefNotification(brief=brief, repo=repo, level=level),
-            )
+            except Exception as exc:
+                logger.exception("Failed to generate report for %s: %s", repo, exc)
+                msg = NotificationMessage(
+                    subject=f"Traffic Report Error: {repo}",
+                    body=f"Failed to generate report for {repo}: {exc}",
+                    level="error",
+                )
+                await notify(config.notify, msg)
 
-        except Exception as exc:
-            logger.exception("Failed to generate report for %s: %s", repo, exc)
-            msg = NotificationMessage(
-                subject=f"Traffic Report Error: {repo}",
-                body=f"Failed to generate report for {repo}: {exc}",
-                level="error",
-            )
-            await notify(config.notify, msg)
+        # Commit and push all changes to data repo at once
+        from src.utils.git import commit_and_push
+
+        repos_str = ", ".join(config.repos)
+        commit_and_push(
+            ["."],
+            f"traffic: bi-weekly report for {repos_str}",
+            config.branch,
+            cwd=clone_path,
+        )
+    finally:
+        shutil.rmtree(clone_path, ignore_errors=True)
 
 
 async def main() -> None:
@@ -189,11 +223,20 @@ async def main() -> None:
     if not config.token:
         logger.error("No token provided")
         sys.exit(1)
+    if not config.data_repo:
+        logger.error(
+            "No data_repo provided. Set the data_repo input to a private repo "
+            "(e.g. my-org/traffic-data) to keep your traffic data private."
+        )
+        sys.exit(1)
     if not config.repos:
         logger.error("No repos configured")
         sys.exit(1)
 
-    logger.info("Starting GitHub Traffic Agent in '%s' mode for %s", config.mode, config.repos)
+    logger.info(
+        "Starting GitHub Traffic Agent in '%s' mode for %s (data repo: %s)",
+        config.mode, config.repos, config.data_repo,
+    )
 
     if config.mode == "collect":
         await run_collect(config)

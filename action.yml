@@ -10,12 +10,15 @@ inputs:
   token:
     description: 'GitHub PAT with repo scope'
     required: true
+  data_repo:
+    description: 'Private repo to store traffic data (owner/repo). Required — keeps your data private.'
+    required: true
   repos:
-    description: 'Comma-separated owner/repo list (defaults to current repo)'
+    description: 'Comma-separated owner/repo list to monitor (defaults to current repo)'
     required: false
     default: ''
   data_dir:
-    description: 'Directory for data files'
+    description: 'Directory for data files within data_repo'
     required: false
     default: 'traffic-data/'
   branch:
@@ -56,6 +59,7 @@ runs:
   image: 'Dockerfile'
   env:
     INPUT_TOKEN: ${{ inputs.token }}
+    INPUT_DATA_REPO: ${{ inputs.data_repo }}
     INPUT_REPOS: ${{ inputs.repos }}
     INPUT_DATA_DIR: ${{ inputs.data_dir }}
     INPUT_BRANCH: ${{ inputs.branch }}

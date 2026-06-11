@@ -37,6 +37,7 @@ class NotifyConfig(BaseModel):
 
 class AgentConfig(BaseModel):
     token: str
+    data_repo: str
     repos: list[str]
     data_dir: str = "traffic-data/"
     branch: str = ""
@@ -48,6 +49,7 @@ class AgentConfig(BaseModel):
     @classmethod
     def from_env(cls) -> AgentConfig:
         token = os.environ.get("INPUT_TOKEN", "")
+        data_repo = os.environ.get("INPUT_DATA_REPO", "")
         repos_str = os.environ.get("INPUT_REPOS", "")
         repos = [r.strip() for r in repos_str.split(",") if r.strip()] if repos_str else []
 
@@ -58,16 +60,13 @@ class AgentConfig(BaseModel):
 
         notify = _parse_notify_config()
 
-        # Resolve data_dir relative to GITHUB_WORKSPACE when running in Actions
         data_dir = os.environ.get("INPUT_DATA_DIR", "traffic-data/")
-        workspace = os.environ.get("GITHUB_WORKSPACE", "")
-        if workspace and not os.path.isabs(data_dir):
-            data_dir = os.path.join(workspace, data_dir)
 
         product_context = _parse_product_context()
 
         return cls(
             token=token,
+            data_repo=data_repo,
             repos=repos,
             data_dir=data_dir,
             branch=os.environ.get("INPUT_BRANCH", ""),

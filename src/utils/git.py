@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
+import tempfile
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +31,14 @@ def git_run(*args: str, cwd: str | None = None) -> str:
     return result.stdout.strip()
 
 
+def _encode_token(token: str) -> str:
+    import base64
+
+    return base64.b64encode(f"x-access-token:{token}".encode()).decode()
+
+
 def configure_git(cwd: str | None = None) -> None:
-    # Mark workspace as safe (required when running as different user in Docker)
+    """Configure git identity and auth for the given working directory."""
     workspace = cwd or os.environ.get("GITHUB_WORKSPACE", "")
     if workspace:
         git_run("config", "--global", "safe.directory", workspace)
@@ -39,7 +46,6 @@ def configure_git(cwd: str | None = None) -> None:
     git_run("config", "user.name", "github-traffic-agent[bot]", cwd=cwd)
     git_run("config", "user.email", "traffic-agent@users.noreply.github.com", cwd=cwd)
 
-    # Configure token-based auth for pushing from Docker container
     token = os.environ.get("INPUT_TOKEN", "")
     if token:
         git_run(
@@ -50,10 +56,27 @@ def configure_git(cwd: str | None = None) -> None:
         )
 
 
-def _encode_token(token: str) -> str:
-    import base64
+def clone_data_repo(data_repo: str, branch: str = "") -> str:
+    """Clone the data repo into a temp directory. Returns the clone path."""
+    token = os.environ.get("INPUT_TOKEN", "")
+    if token:
+        repo_url = f"https://x-access-token:{token}@github.com/{data_repo}.git"
+    else:
+        repo_url = f"https://github.com/{data_repo}.git"
 
-    return base64.b64encode(f"x-access-token:{token}".encode()).decode()
+    clone_dir = tempfile.mkdtemp(prefix="traffic-data-")
+
+    clone_args = ["clone", "--depth", "1"]
+    if branch:
+        clone_args.extend(["--branch", branch])
+    clone_args.extend([repo_url, clone_dir])
+
+    git_run(*clone_args, cwd="/tmp")
+    git_run("config", "--global", "safe.directory", clone_dir)
+    configure_git(cwd=clone_dir)
+
+    logger.info("Cloned data repo %s to %s", data_repo, clone_dir)
+    return clone_dir
 
 
 def commit_and_push(
