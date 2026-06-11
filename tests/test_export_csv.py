@@ -32,9 +32,13 @@ def _setup_data(tmp_path: Path) -> str:
 
     paths_dir = memory / "paths"
     paths_dir.mkdir()
-    (paths_dir / "2026-06-09.json").write_text(
-        json.dumps([{"path": "/navox-labs/github-traffic-agent", "title": "Overview", "count": 25, "uniques": 1}])
-    )
+    path_entry = {
+        "path": "/navox-labs/github-traffic-agent",
+        "title": "Overview",
+        "count": 25,
+        "uniques": 1,
+    }
+    (paths_dir / "2026-06-09.json").write_text(json.dumps([path_entry]))
 
     return str(tmp_path)
 

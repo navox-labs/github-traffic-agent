@@ -48,7 +48,7 @@ def export_csv(repo: str, data_dir: str) -> str:
                 d = f.stem  # filename is YYYY-MM-DD
                 items = _load_json(f)
                 if items:
-                    top = max(items, key=lambda x: x.get("count", 0))
+                    top = max(items, key=lambda x: int(str(x.get("count", 0))))
                     by_date.setdefault(d, {"date": d})
                     by_date[d][col_prefix] = top.get(key_field, "")
                     by_date[d][f"{col_prefix}_hits"] = top.get("count", 0)
@@ -67,8 +67,8 @@ def export_csv(repo: str, data_dir: str) -> str:
         "top_path_hits",
     ]
 
-    with open(csv_path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+    with open(csv_path, "w", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         for row in sorted_rows:
             # Fill missing columns with defaults
@@ -80,11 +80,12 @@ def export_csv(repo: str, data_dir: str) -> str:
     return str(csv_path)
 
 
-def _load_json(filepath: Path) -> list[dict]:
+def _load_json(filepath: Path) -> list[dict[str, object]]:
     if not filepath.exists():
         return []
     try:
-        return json.loads(filepath.read_text())
+        data: list[dict[str, object]] = json.loads(filepath.read_text())
+        return data
     except (json.JSONDecodeError, ValueError):
         logger.warning("Failed to parse %s", filepath)
         return []
