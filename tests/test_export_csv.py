@@ -44,6 +44,7 @@ def test_export_csv_creates_file(tmp_path: Path) -> None:
     result = export_csv("navox-labs/github-traffic-agent", data_dir)
     assert Path(result).exists()
     assert result.endswith("-traffic.csv")
+    assert "_to_" in Path(result).name
 
 
 def test_export_csv_has_correct_headers(tmp_path: Path) -> None:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 import json
 import logging
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -17,8 +17,9 @@ def export_csv(repo: str, data_dir: str) -> str:
     exports_dir = Path(data_dir) / "exports"
     exports_dir.mkdir(parents=True, exist_ok=True)
 
-    today = date.today().isoformat()
-    csv_path = exports_dir / f"{today}-traffic.csv"
+    today = date.today()
+    period_start = today - timedelta(days=14)
+    csv_path = exports_dir / f"{period_start.isoformat()}_to_{today.isoformat()}-traffic.csv"
 
     views = _load_json(base / "views.json")
     clones = _load_json(base / "clones.json")
