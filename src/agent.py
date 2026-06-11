@@ -106,6 +106,7 @@ async def run_collect(config: AgentConfig) -> None:
 async def run_report(config: AgentConfig) -> None:
     """Bi-weekly pipeline: Analyze -> Predict -> Propose -> Intelligence -> Notify."""
     from src.skills.analyze import analyze
+    from src.skills.export_csv import export_csv
     from src.skills.intelligence import generate_brief, load_prior_actions, save_actions
     from src.skills.predict import predict
     from src.skills.propose import propose
@@ -121,6 +122,9 @@ async def run_report(config: AgentConfig) -> None:
 
             # Generate long report as committed artifact
             report_path = generate_report(repo, config.data_dir, analysis, predictions, proposals)
+
+            # Export CSV snapshot for long-term archival
+            csv_path = export_csv(repo, config.data_dir)
 
             # Intelligence layer: LLM brief (or fallback)
             prior_actions = load_prior_actions(config.data_dir)
@@ -149,7 +153,7 @@ async def run_report(config: AgentConfig) -> None:
 
             from src.utils.git import commit_and_push
 
-            commit_files = [report_path]
+            commit_files = [report_path, csv_path]
             actions_file = str(
                 Path(config.data_dir) / "memory" / "brief-actions.json"
             )
